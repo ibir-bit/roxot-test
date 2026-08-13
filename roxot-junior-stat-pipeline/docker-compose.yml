@@ -1,0 +1,43 @@
+services:
+  php:
+    build:
+      context: ./php-app
+    environment:
+      APP_ENV: dev
+      APP_TIMEZONE: Europe/Moscow
+      DB_DSN: pgsql:host=postgres;port=5432;dbname=stat_pipeline
+      DB_USER: app
+      DB_PASSWORD: app
+      GO_STAT_URL: http://go-stat:7011
+    ports:
+      - "18080:8080"
+    volumes:
+      - ./php-app:/app
+    depends_on:
+      - postgres
+
+  go-stat:
+    build:
+      context: ./go-stat
+    environment:
+      HTTP_ADDR: :7011
+      DATABASE_URL: postgres://app:app@postgres:5432/stat_pipeline?sslmode=disable
+    ports:
+      - "17011:7011"
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: stat_pipeline
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+    ports:
+      - "15432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./php-app/migrations:/docker-entrypoint-initdb.d:ro
+
+volumes:
+  postgres-data:

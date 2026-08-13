@@ -1,0 +1,121 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use App\Aggregation\DailyStatsAggregator;
+use App\Database;
+
+require dirname(__DIR__) . '/src/bootstrap.php';
+
+function sendStatEvent(string $statBaseUrl, array $event): array
+{
+    $url = rtrim($statBaseUrl, '/') . '/stat?' . http_build_query([
+        'placement' => $event['placement_id'],
+        'actionType' => $event['action_type'],
+        'price' => $event['price'],
+        'occurredAt' => $event['occurred_at'],
+        'requestId' => $event['request_id'],
+    ]);
+
+    $context = stream_context_create([
+        'http' => [
+            'method' => 'GET',
+            'timeout' => 3,
+            'ignore_errors' => true,
+            'header' => "Accept: application/json\r\n",
+        ],
+    ]);
+
+    $body = @file_get_contents($url, false, $context);
+
+    if ($body === false) {
+        throw new RuntimeException(sprintf('Stat service request failed: %s', $url));
+    }
+
+    $statusCode = 0;
+    foreach ($http_response_header ?? [] as $header) {
+        if (preg_match('/^HTTP\/\S+\s+(\d{3})/', $header, $matches)) {
+            $statusCode = (int) $matches[1];
+            break;
+        }
+    }
+
+    return [
+        'status_code' => $statusCode,
+        'body' => json_decode($body, true),
+        'url' => $url,
+    ];
+}
+
+$command = $argv[1] ?? 'help';
+$pdo = Database::connect();
+
+if ($command === 'aggregate:daily') {
+    $date = $argv[2] ?? (new DateTimeImmutable('yesterday'))->format('Y-m-d');
+    $count = (new DailyStatsAggregator($pdo))->aggregate($date);
+
+    echo sprintf("Aggregated %d placement row(s) for %s\n", $count, $date);
+    exit(0);
+}
+
+if ($command === 'seed:demo-events') {
+    try {
+        $pdo->exec('TRUNCATE raw_events, daily_stats RESTART IDENTITY');
+
+        $events = [
+            ['placement_id' => 'placement-video-main', 'action_type' => 'impression', 'price' => '12.00', 'occurred_at' => '2026-08-06T20:55:00+00:00', 'request_id' => 'seed-1'],
+            ['placement_id' => 'placement-video-main', 'action_type' => 'click', 'price' => '0.00', 'occurred_at' => '2026-08-06T20:56:00+00:00', 'request_id' => 'seed-2'],
+            ['placement_id' => 'placement-video-main', 'action_type' => 'impression', 'price' => '34.00', 'occurred_at' => '2026-08-06T21:05:00+00:00', 'request_id' => 'seed-3'],
+            ['placement_id' => 'placement-banner-sidebar', 'action_type' => 'impression', 'price' => '8.00', 'occurred_at' => '2026-08-07T10:00:00+00:00', 'request_id' => 'seed-4'],
+            ['placement_id' => 'missing-placement', 'action_type' => 'impression', 'price' => '9.99', 'occurred_at' => '2026-08-07T11:00:00+00:00', 'request_id' => 'seed-bad-placement'],
+            ['placement_id' => 'placement-video-main', 'action_type' => 'unknown_action', 'price' => '1.00', 'occurred_at' => '2026-08-07T12:00:00+00:00', 'request_id' => 'seed-bad-action'],
+        ];
+
+        $statBaseUrl = getenv('GO_STAT_URL') ?: 'http://go-stat:7011';
+        $accepted = 0;
+        $rejected = 0;
+
+        foreach ($events as $event) {
+            $response = sendStatEvent($statBaseUrl, $event);
+
+            if ($response['status_code'] >= 200 && $response['status_code'] < 300) {
+                $accepted++;
+                echo sprintf(
+                    "accepted %s %s -> HTTP %d\n",
+                    $event['request_id'],
+                    $event['action_type'],
+                    $response['status_code'],
+                );
+                continue;
+            }
+
+            $rejected++;
+            echo sprintf(
+                "rejected %s %s -> HTTP %d\n",
+                $event['request_id'],
+                $event['action_type'],
+                $response['status_code'],
+            );
+        }
+
+        echo sprintf(
+            "Sent %d event(s) to %s: %d accepted, %d rejected\n",
+            count($events),
+            $statBaseUrl,
+            $accepted,
+            $rejected,
+        );
+        exit(0);
+    } catch (Throwable $exception) {
+        fwrite(STDERR, $exception->getMessage() . "\n");
+        exit(1);
+    }
+}
+
+echo <<<'TEXT'
+Available commands:
+  aggregate:daily [YYYY-MM-DD]
+  seed:demo-events
+
+TEXT;

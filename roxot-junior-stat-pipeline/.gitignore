@@ -1,0 +1,8 @@
+.idea/
+.env
+vendor/
+node_modules/
+var/
+tmp/
+*.log
+
