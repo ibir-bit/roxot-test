@@ -40,7 +40,12 @@ final class DailyStatsAggregator
         $rows = $select->fetchAll();
         $insert = $this->pdo->prepare(
             'INSERT INTO daily_stats (stat_date, placement_id, impressions, clicks, revenue_cents, updated_at)
-             VALUES (:stat_date, :placement_id, :impressions, :clicks, :revenue_cents, now())'
+             VALUES (:stat_date, :placement_id, :impressions, :clicks, :revenue_cents, now())
+             ON CONFLICT (placement_id, stat_date) DO UPDATE SET
+             impressions = excluded.impressions,
+             clicks = excluded.clicks,
+             revenue_cents = excluded.revenue_cents,
+             updated_at = now()'
         );
 
         foreach ($rows as $row) {

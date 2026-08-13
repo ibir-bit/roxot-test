@@ -17,7 +17,7 @@ CREATE TABLE placements (
 );
 
 CREATE TABLE raw_events (
-    id BIGSERIAL PRIMARY KEY,
+    id BIGSERIAL PRIMARY KEY, 
     placement_id TEXT NOT NULL,
     action_type TEXT NOT NULL,
     price_cents INTEGER NOT NULL DEFAULT 0,
@@ -36,7 +36,8 @@ CREATE TABLE daily_stats (
     impressions INTEGER NOT NULL DEFAULT 0,
     clicks INTEGER NOT NULL DEFAULT 0,
     revenue_cents INTEGER NOT NULL DEFAULT 0,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (placement_id, stat_date)
 );
 
 INSERT INTO publishers (id, name) VALUES
