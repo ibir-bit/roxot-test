@@ -17,7 +17,8 @@ final class DailyStatsAggregator
 
     public function aggregate(string $date): int
     {
-        $start = new DateTimeImmutable($date . ' 00:00:00', new DateTimeZone('UTC'));
+        $timezone = new DateTimeZone(getenv('APP_TIMEZONE') ?: 'UTC');
+        $start = new DateTimeImmutable($date . ' 00:00:00', $timezone);
         $end = $start->add(new DateInterval('P1D'));
 
         $select = $this->pdo->prepare(
