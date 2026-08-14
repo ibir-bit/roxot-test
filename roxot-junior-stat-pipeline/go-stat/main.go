@@ -79,11 +79,20 @@ func handleStat(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		price, _ := strconv.ParseFloat(query.Get("price"), 64)
+		price, err := strconv.ParseFloat(query.Get("price"), 64)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, statResponse{Status: "error", Error: "invalid_price"})
+			return
+		}
+
 		priceCents := int(math.Round(price * 100))
+		if priceCents < 0 {
+			writeJSON(w, http.StatusBadRequest, statResponse{Status: "error", Error: "invalid_price"})
+			return
+		}
 
 		var eventID int64
-		err := db.QueryRowContext(
+		err = db.QueryRowContext(
 			r.Context(),
 			`INSERT INTO raw_events (placement_id, action_type, price_cents, occurred_at, request_id)
 			 VALUES ($1, $2, $3, $4, $5)
