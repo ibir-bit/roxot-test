@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"time"
+	"math"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
@@ -68,8 +69,18 @@ func handleStat(db *sql.DB) http.HandlerFunc {
 		requestID := query.Get("requestId")
 		occurredAt := parseOccurredAt(query.Get("occurredAt"))
 
+		if placementID == "" || (placementID != "placement-video-main" && placementID != "placement-banner-sidebar" && placementID != "placement-sport-top") {
+			writeJSON(w, http.StatusBadRequest, statResponse{Status: "error", Error: "invalid_placement_id"})
+			return
+		}
+
+		if actionType != "impression" && actionType != "click" {
+			writeJSON(w, http.StatusBadRequest, statResponse{Status: "error", Error: "invalid_action_type"})
+			return
+		}
+
 		price, _ := strconv.ParseFloat(query.Get("price"), 64)
-		priceCents := int(price)
+		priceCents := int(math.Round(price * 100))
 
 		var eventID int64
 		err := db.QueryRowContext(
